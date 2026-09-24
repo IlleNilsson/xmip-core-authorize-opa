@@ -7,8 +7,8 @@
 //! `POST /v1/data/<path>` with the record and the attempt as [`input`] — and
 //! answers `{"result": true}` or `{"result": false}`, or a `result` object
 //! carrying `allow` and, where the policy's author was kind, a `reason`.
-//! The HTTP is a few lines of HTTP/1.1 over std TCP ([`client`]); there is
-//! no client crate and no runtime behind it.
+//! The HTTP is the estate's minimal HTTP/1.1 client, `net::http`, over std
+//! TCP; there is no client crate and no runtime behind it.
 //!
 //! **Offline is the default (ADR-0045).** The agent is asked only where the
 //! configuration says the node is online, or where the agent is on loopback
@@ -23,20 +23,23 @@
 //! a policy that abstains as consulted, so silence from a mistyped path
 //! would open the gate it was configured to guard.
 
-pub mod client;
 pub mod input;
 
 use authorize::{Attempt, AuthorizeError, Authorizer, Decision};
 use context::IdentityFacts;
+use net::Endpoint;
+use net::http::{self, Request};
 use serde_json::Value;
 use std::time::Duration;
 use xcore::Layer;
 
-pub use client::Endpoint;
 pub use input::input;
 
 /// The manifest leaf, and the name a denial carries.
 pub const NAME: &str = "opa";
+
+/// The port an Open Policy Agent listens on where the endpoint names none.
+pub const DEFAULT_PORT: u16 = 8181;
 
 /// How long the agent has to answer where configuration does not say.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(2);
@@ -58,10 +61,14 @@ impl Opa {
     ///
     /// # Errors
     ///
-    /// Refuses an endpoint [`Endpoint::parse`] refuses, and a path that is
-    /// empty or carries anything but letters, digits, `_`, `-`, `.` and `/`.
+    /// Refuses an endpoint [`Endpoint::parse`] refuses — anything but
+    /// `http://`, since the client speaks plain HTTP/1.1 and an agent that
+    /// must be reached over TLS is reached through a local proxy — and a
+    /// path that is empty or carries anything but letters, digits, `_`,
+    /// `-`, `.` and `/`.
     pub fn at(endpoint: &str, path: &str) -> Result<Self, AuthorizeError> {
-        let endpoint = Endpoint::parse(endpoint)?;
+        let endpoint = Endpoint::parse(endpoint, DEFAULT_PORT)
+            .map_err(|refused| AuthorizeError::new(format!("the endpoint {refused}")))?;
         let path = path.trim_matches('/');
         let plain = |c: char| c.is_ascii_alphanumeric() || "_-./".contains(c);
 
@@ -104,7 +111,7 @@ impl Opa {
     }
 
     fn settled(mut self) -> Self {
-        self.silence = (!self.online && !self.endpoint.is_loopback()).then(|| {
+        self.silence = (!self.online && !self.endpoint.names_loopback()).then(|| {
             format!(
                 "the node is offline and the agent at '{}' is not on loopback, \
                  so it is not asked (ADR-0045)",
@@ -112,6 +119,27 @@ impl Opa {
             )
         });
         self
+    }
+
+    /// POST `body` to the decision under the endpoint's base path, and
+    /// answer with the response's status and body.
+    fn ask(&self, body: &str) -> Result<(u16, String), String> {
+        let base = self.endpoint.path().trim_end_matches('/');
+        let request = Request::new("POST", format!("{base}/v1/data/{}", self.path))
+            .header("Content-Type", "application/json")
+            .body(body.as_bytes());
+
+        self.endpoint
+            .resolve()
+            .and_then(|addresses| http::connect(&addresses, self.timeout))
+            .and_then(|stream| http::exchange(stream, &self.endpoint.authority(), &request))
+            .map(|answer| (answer.status, answer.text()))
+            .map_err(|failed| {
+                format!(
+                    "the agent at {} did not answer: {failed}",
+                    self.endpoint.authority()
+                )
+            })
     }
 
     /// What the agent's answer means.
@@ -163,9 +191,7 @@ impl Authorizer for Opa {
 
         let body = input(identity, attempt).to_string();
         let answer = self
-            .endpoint
-            .post(&format!("/v1/data/{}", self.path), &body, self.timeout)
-            .map_err(|refused| refused.message)
+            .ask(&body)
             .and_then(|(status, body)| self.read(status, &body));
 
         Some(match answer {
@@ -372,7 +398,7 @@ mod tests {
         let refused =
             |endpoint: &str, path: &str| Opa::at(endpoint, path).expect_err("refused").message;
 
-        assert!(refused("https://opa.example", "xmip/authz").contains("is not http://"));
+        assert!(refused("https://opa.example", "xmip/authz").contains("not an http:// URL"));
         assert!(refused("http://127.0.0.1:8181", "/").contains("is not a data path"));
         assert!(refused("http://127.0.0.1:8181", "xmip/authz allow").contains("not a data path"));
     }
