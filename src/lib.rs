@@ -61,13 +61,15 @@ impl Opa {
     ///
     /// # Errors
     ///
-    /// Refuses an endpoint [`Endpoint::parse`] refuses — anything but
-    /// `http://`, since the client speaks plain HTTP/1.1 and an agent that
+    /// Refuses an endpoint [`Endpoint::parse`] or [`Endpoint::plain`]
+    /// refuses — anything but `http://`, since the client speaks plain HTTP/1.1 and an agent that
     /// must be reached over TLS is reached through a local proxy — and a
     /// path that is empty or carries anything but letters, digits, `_`,
     /// `-`, `.` and `/`.
     pub fn at(endpoint: &str, path: &str) -> Result<Self, AuthorizeError> {
-        let endpoint = Endpoint::parse(endpoint, DEFAULT_PORT)
+        let endpoint = Endpoint::parse(endpoint)
+            .and_then(Endpoint::plain)
+            .map(|endpoint| endpoint.or_port(DEFAULT_PORT))
             .map_err(|refused| AuthorizeError::new(format!("the endpoint {refused}")))?;
         let path = path.trim_matches('/');
         let plain = |c: char| c.is_ascii_alphanumeric() || "_-./".contains(c);
@@ -126,13 +128,14 @@ impl Opa {
     fn ask(&self, body: &str) -> Result<(u16, String), String> {
         let base = self.endpoint.path().trim_end_matches('/');
         let request = Request::new("POST", format!("{base}/v1/data/{}", self.path))
+            .header("Host", &self.endpoint.authority())
             .header("Content-Type", "application/json")
             .body(body.as_bytes());
 
         self.endpoint
             .resolve()
             .and_then(|addresses| http::connect(&addresses, self.timeout))
-            .and_then(|stream| http::exchange(stream, &self.endpoint.authority(), &request))
+            .and_then(|stream| http::exchange(stream, &request))
             .map(|answer| (answer.status, answer.text()))
             .map_err(|failed| {
                 format!(
@@ -398,7 +401,7 @@ mod tests {
         let refused =
             |endpoint: &str, path: &str| Opa::at(endpoint, path).expect_err("refused").message;
 
-        assert!(refused("https://opa.example", "xmip/authz").contains("not an http:// URL"));
+        assert!(refused("https://opa.example", "xmip/authz").contains("plain HTTP/1.1 only"));
         assert!(refused("http://127.0.0.1:8181", "/").contains("is not a data path"));
         assert!(refused("http://127.0.0.1:8181", "xmip/authz allow").contains("not a data path"));
     }
