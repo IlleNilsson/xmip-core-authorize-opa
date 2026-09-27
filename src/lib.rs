@@ -135,7 +135,7 @@ impl Opa {
         let answer = self
             .endpoint
             .resolve()
-            .and_then(|addresses| http::connect(&addresses, self.timeout))
+            .and_then(|addresses| net::connect(&addresses[..], Some(self.timeout)))
             .and_then(|stream| http::exchange(stream, &request))
             .map_err(|failed| {
                 format!(
