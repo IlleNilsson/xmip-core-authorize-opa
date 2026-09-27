@@ -132,17 +132,21 @@ impl Opa {
             .header("Content-Type", "application/json")
             .body(body.as_bytes());
 
-        self.endpoint
+        let answer = self
+            .endpoint
             .resolve()
             .and_then(|addresses| http::connect(&addresses, self.timeout))
             .and_then(|stream| http::exchange(stream, &request))
-            .map(|answer| (answer.status, answer.text()))
             .map_err(|failed| {
                 format!(
                     "the agent at {} did not answer: {failed}",
                     self.endpoint.authority()
                 )
-            })
+            })?;
+        let text = answer
+            .text()
+            .map_err(|refused| format!("the agent at {}: {refused}", self.endpoint.authority()))?;
+        Ok((answer.status, text.to_string()))
     }
 
     /// What the agent's answer means.
