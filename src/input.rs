@@ -106,7 +106,7 @@ mod tests {
             .with_evidence("department", "billing"),
             Some(AuthenticatedIdentity::new(
                 mechanism::edi_x12_interchange(),
-                "ISA06=PARTNERX",
+                "ISA06=PARTYX",
                 Established::Detected,
                 Verified::Claimed,
             )),
