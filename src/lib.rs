@@ -356,10 +356,8 @@ mod tests {
 
     #[test]
     fn an_agent_that_does_not_answer_is_a_denial_and_never_a_permit() {
-        // A port nothing listens on: bound, read, and let go.
-        let gone = TcpListener::bind("127.0.0.1:0")
-            .and_then(|listener| listener.local_addr())
-            .expect("a port");
+        // A port nothing listens on.
+        let gone = net::fixture::unheld();
         let opa = Opa::at(&format!("http://{gone}"), "xmip/authz/allow")
             .expect("configured")
             .timing_out_after(Duration::from_millis(500));
