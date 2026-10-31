@@ -2,7 +2,7 @@
 //! policy reads under `input`.
 
 use authorize::Attempt;
-use context::{AuthenticatedIdentity, IdentityFacts, Verified};
+use context::{AuthenticatedIdentity, IdentityFacts};
 use serde_json::{Map, Value, json};
 use xcore::Assurance;
 
@@ -68,15 +68,7 @@ fn held(identity: &AuthenticatedIdentity) -> Value {
         .into(),
     );
     record.insert("value".into(), identity.value.clone().into());
-    record.insert(
-        "verified".into(),
-        match identity.verified {
-            Verified::Proven => "proven",
-            Verified::Claimed => "claimed",
-            Verified::Refused => "refused",
-        }
-        .into(),
-    );
+    record.insert("verified".into(), identity.verified.word().into());
     if let Some(party) = identity.party_id {
         record.insert("party".into(), party.to_string().into());
     }
@@ -89,7 +81,7 @@ fn held(identity: &AuthenticatedIdentity) -> Value {
 mod tests {
     use super::*;
     use authorize::Action;
-    use context::Alignment;
+    use context::{Alignment, Verified};
     use xcore::{Established, PartyId, mechanism};
 
     #[test]
