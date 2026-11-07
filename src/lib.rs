@@ -255,7 +255,7 @@ mod tests {
             );
             stream.write_all(response.as_bytes()).expect("answered");
 
-            String::from_utf8_lossy(&request).into_owned()
+            String::from_utf8_lossy_owned(request)
         });
 
         (format!("http://{address}"), served)
