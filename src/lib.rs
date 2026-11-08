@@ -12,16 +12,16 @@
 //!
 //! **Offline is the default (ADR-0045).** The agent is asked only where the
 //! configuration says the node is online, or where the agent is on loopback
-//! and asking it leaves nothing. Otherwise this policy has no opinion, and
-//! [`Opa::silence`] says why, so an operator reading a gate that OPA did not
-//! speak at can tell a policy that abstained from one that was never asked.
+//! and asking it leaves nothing. Otherwise the agent is not asked and this
+//! policy denies, the reason [`Opa::silence`]'s: a decision that could not
+//! be fetched is no permit, and an operator reading the denial can tell an
+//! agent that was never asked from one that refused.
 //!
-//! **Asked, it fails closed.** An agent that does not answer, answers with
-//! anything but 200, answers what is not JSON, has no decision at the path
-//! (Rego's undefined) or carries no `allow` is a denial naming this policy
-//! and the reason, never a permit and never silence: the capability counts
-//! a policy that abstains as consulted, so silence from a mistyped path
-//! would open the gate it was configured to guard.
+//! **Asked, it fails closed too.** An agent that does not answer, answers
+//! with anything but 200, answers what is not JSON, has no decision at the
+//! path (Rego's undefined) or carries no `allow` is a denial naming this
+//! policy and the reason, never a permit and never an abstention, which a
+//! mistyped path would otherwise turn into a gate decided by the others.
 
 pub mod input;
 
@@ -105,8 +105,8 @@ impl Opa {
         self
     }
 
-    /// Why this policy has no opinion, where it has none: `None` where the
-    /// agent is asked, and the reason where it is not.
+    /// Why the agent is not asked, which is the reason this policy denies:
+    /// `None` where the agent is asked.
     #[must_use]
     pub fn silence(&self) -> Option<&str> {
         self.silence.as_deref()
@@ -192,8 +192,8 @@ impl Authorizer for Opa {
     }
 
     fn decide(&self, identity: &IdentityFacts, attempt: &Attempt) -> Option<Decision> {
-        if self.silence.is_some() {
-            return None;
+        if let Some(silence) = &self.silence {
+            return Some(Decision::denied(NAME, silence.as_str()));
         }
 
         let body = input(identity, attempt).to_string();
@@ -276,7 +276,7 @@ mod tests {
     }
 
     fn sending() -> Attempt {
-        Attempt::new(Action::Send, "Billing")
+        Attempt::new(Action::Send, "Billing", 1_700_000_000 * 1_000_000_000)
     }
 
     #[test]
@@ -336,10 +336,17 @@ mod tests {
     }
 
     #[test]
-    fn an_offline_node_does_not_ask_an_agent_elsewhere_and_says_why() {
+    fn an_offline_node_does_not_ask_an_agent_elsewhere_and_is_denied_saying_why() {
         let elsewhere = Opa::at("http://opa.example:8181", "xmip/authz/allow").expect("configured");
 
-        assert_eq!(elsewhere.decide(&alice(), &sending()), None);
+        assert_eq!(
+            elsewhere.decide(&alice(), &sending()),
+            Some(Decision::denied(
+                NAME,
+                "the node is offline and the agent at 'opa.example' is not on loopback, \
+                 so it is not asked (ADR-0045)"
+            ))
+        );
         assert_eq!(
             elsewhere.silence(),
             Some(
