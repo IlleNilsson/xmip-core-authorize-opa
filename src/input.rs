@@ -103,9 +103,8 @@ mod tests {
                 Verified::Claimed,
             )),
         );
-        let attempt = Attempt::new(Action::Send, "Billing")
-            .on_contract("X12-810")
-            .at(1_700_000_000 * 1_000_000_000);
+        let attempt = Attempt::new(Action::Send, "Billing", 1_700_000_000 * 1_000_000_000)
+            .on_contract("X12-810");
 
         let body = input(&facts, &attempt);
         let input = &body["input"];

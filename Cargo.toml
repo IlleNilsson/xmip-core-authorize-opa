@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/IlleNilsson/xmip-core-authorize-opa"
-description = "Authorization by a decision fetched from an Open Policy Agent over its REST data API, asked only where the node is online or the agent is on loopback; an agent that does not answer is a denial, never a permit. A xmip-core-authorize technology."
+description = "Authorization by a decision fetched from an Open Policy Agent over its REST data API, asked only where the node is online or the agent is on loopback; an agent that is not asked, or does not answer, is a denial, never a permit and never an abstention. A xmip-core-authorize technology."
 publish = false
 
 [lib]
