@@ -14,19 +14,19 @@ path = "src/lib.rs"
 # A Technology depends on its parent Capability, never the reverse
 # (repository-model.md). The facts it judges are context's and the layer it
 # answers for is core's.
-authorize = { package = "xmip-core-authorize", git = "https://github.com/IlleNilsson/xmip-core-authorize", branch = "main" }
-context = { package = "xmip-core-context", git = "https://github.com/IlleNilsson/xmip-core-context", branch = "main" }
-xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
+authorize = { workspace = true }
+context = { workspace = true }
+xcore = { workspace = true }
 
 # The input document and the answer are JSON; the HTTP/1.1 around them is
 # the estate's minimal client over std TCP (no client crate, no runtime).
 serde_json = "1"
-net = { package = "xmip-core-library-net", git = "https://github.com/IlleNilsson/xmip-core-library-net", branch = "main" }
+net = { workspace = true }
 
 [dev-dependencies]
 # A loopback address no one holds, for what a test wants nothing listening
 # at or binds later (`net::fixture::unheld`).
-net = { package = "xmip-core-library-net", git = "https://github.com/IlleNilsson/xmip-core-library-net", branch = "main", features = ["test-support"] }
+net = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true
